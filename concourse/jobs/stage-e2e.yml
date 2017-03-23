@@ -1,0 +1,29 @@
+  - name: stage-e2e
+    serial: true
+    public: false
+    plan:
+      - aggregate:
+        - get: tools
+        - get: m2
+        - get: repo
+          passed: [ stage-deploy ]
+          trigger: true
+      - task: stage-smoke
+        file: tools/concourse/tasks/stage-e2e.yml
+        params:
+          - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+          - REDOWNLOAD_INFRA: {{redownload-infra}}
+          - REDEPLOY_INFRA: {{redeploy-infra}}
+          - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+          - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+          - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+          - REPO_WITH_JARS: {{snapshots-repo}}
+          - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+          - M2_REPO: {{maven-local-dir}}
+          - CF_STAGE_USERNAME: {{cf-stage-username}}
+          - CF_STAGE_PASSWORD: {{cf-stage-password}}
+          - CF_STAGE_ORG: {{cf-stage-org}}
+          - CF_STAGE_SPACE: {{cf-stage-space}}
+          - CF_STAGE_API_URL: {{cf-stage-api-url}}

@@ -1,0 +1,30 @@
+  - name: build-and-upload
+    serial: true
+    public: false
+    plan:
+      - aggregate:
+        - get: tools
+        - get: m2
+        - get: repo
+        - get: version
+          passed: [ generate-version ]
+          trigger: true
+      - task: build-and-upload
+        file: tools/concourse/tasks/build-and-upload.yml
+        params:
+          - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+          - REDOWNLOAD_INFRA: {{redownload-infra}}
+          - REDEPLOY_INFRA: {{redeploy-infra}}
+          - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+          - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+          - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+          - REPO_WITH_JARS: {{snapshots-repo}}
+          - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+          - M2_REPO: {{maven-local-dir}}
+      - put: repo
+        params:
+          repository: out
+          tag: out/tag
+          only_tag: true

@@ -1,0 +1,48 @@
+apply plugin: 'groovy'
+
+sourceSets {
+    main {
+        groovy {
+            srcDirs 'jobs', 'src/main/groovy'
+        }
+        resources {
+            srcDirs 'src/main/resources'
+        }
+    }
+}
+
+repositories {
+    jcenter()
+    mavenCentral()
+    maven { url 'http://repo.jenkins-ci.org/releases/' }
+    maven {
+				credentials {
+						username mavenUser
+						password mavenPassword
+				}
+				url "https://sres.web.boeing.com/artifactory/Maven-Releases"
+		}
+		maven {
+				credentials {
+						username mavenUser
+						password mavenPassword
+				}
+				url "https://sres.web.boeing.com/artifactory/Maven-Snapshots"
+		}
+}
+
+dependencies {
+    compile 'org.codehaus.groovy:groovy-all:2.4.7'
+    compile 'org.jenkins-ci.plugins:job-dsl-core:1.50'
+    testCompile project(":common")
+    testCompile('org.spockframework:spock-core:1.0-groovy-2.4') {
+        exclude module: 'groovy-all'
+    }
+    testCompile 'xmlunit:xmlunit:1.6'
+}
+
+test {
+    testLogging {
+        exceptionFormat = 'full'
+    }
+}

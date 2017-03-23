@@ -1,0 +1,25 @@
+---
+resources:
+ - name: tools
+   type: git
+   source:
+    uri: {{tools-scripts-url}}
+    branch: {{tools-branch}}
+    private_key: {{tools-private-key}}
+
+ - name: gradle-java-8
+   type: docker-image
+   source:
+    email: {{docker-email}}
+    username: {{docker-username}}
+    password: {{docker-password}}
+    repository: art-phx-prod02.vmpc1.cloud.boeing.com:5000/gradle:3.2.1
+
+jobs:
+  - name: build-docker-image
+    plan:
+    - get: tools
+    - put: docker-image
+      resource: gradle-java-8
+      params:
+          build: tools/concourse

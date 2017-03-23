@@ -1,0 +1,24 @@
+resources:
+ - name: repo
+   type: git
+   source:
+    uri: {{app-url}}
+    branch: {{app-branch}}
+    private_key: {{github-private-key}}
+   check_every: 10s
+ - name: version
+   type: git
+   source:
+    uri: {{app-url}}
+    branch: version
+    private_key: {{github-private-key}}
+ - name: tools
+   type: git
+   source:
+    uri: {{tools-scripts-url}}
+    branch: {{tools-branch}}
+    private_key: {{tools-private-key}}
+ - name: m2
+   type: docker-image
+   source:
+    repository: springcloud/spring-pipeline-m2

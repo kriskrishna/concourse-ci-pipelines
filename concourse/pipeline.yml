@@ -1,0 +1,322 @@
+---
+resources:
+ - name: repo
+   type: git
+   source:
+    uri: {{app-url}}
+    branch: {{app-branch}}
+    private_key: {{github-private-key}}
+   check_every: 10s
+ - name: version
+   type: git
+   source:
+    uri: {{app-url}}
+    branch: version
+    private_key: {{github-private-key}}
+ - name: tools
+   type: git
+   source:
+    uri: {{tools-scripts-url}}
+    branch: {{tools-branch}}
+    private_key: {{tools-private-key}}
+ - name: m2
+   type: docker-image
+   source:
+    repository: springcloud/spring-pipeline-m2
+jobs:
+  - name: generate-version
+    public: true
+    plan:
+      - aggregate:
+        - get: tools
+        - get: version
+        - get: repo
+          trigger: true
+      - task: generate-version
+        file: tools/concourse/tasks/generate-version.yml
+        params:
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+      - put: version
+        params:
+          repository: out
+
+  - name: build-and-upload
+    serial: true
+    public: false
+    plan:
+      - aggregate:
+        - get: tools
+        - get: m2
+        - get: repo
+        - get: version
+          passed: [ generate-version ]
+          trigger: true
+      - task: build-and-upload
+        file: tools/concourse/tasks/build-and-upload.yml
+        params:
+          - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+          - REDOWNLOAD_INFRA: {{redownload-infra}}
+          - REDEPLOY_INFRA: {{redeploy-infra}}
+          - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+          - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+          - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+          - REPO_WITH_JARS: {{snapshots-repo}}
+          - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+          - M2_REPO: {{maven-local-dir}}
+      - put: repo
+        params:
+          repository: out
+          tag: out/tag
+          only_tag: true
+
+  - name: test-deploy
+    serial: true
+    public: false
+    plan:
+      - aggregate:
+        - get: tools
+        - get: m2
+        - get: repo
+          passed: [ build-and-upload ]
+          trigger: true
+      - task: test-deploy
+        file: tools/concourse/tasks/test-deploy.yml
+        params:
+          - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+          - REDOWNLOAD_INFRA: {{redownload-infra}}
+          - REDEPLOY_INFRA: {{redeploy-infra}}
+          - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+          - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+          - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+          - REPO_WITH_JARS: {{snapshots-repo}}
+          - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+          - M2_REPO: {{maven-local-dir}}
+          - CF_TEST_USERNAME: {{cf-test-username}}
+          - CF_TEST_PASSWORD: {{cf-test-password}}
+          - CF_TEST_ORG: {{cf-test-org}}
+          - CF_TEST_SPACE: {{cf-test-space}}
+          - CF_TEST_API_URL: {{cf-test-api-url}}
+          - CF_HOSTNAME_UUID: {{cf-hostname-uuid}}
+
+  - name: test-smoke
+    serial: true
+    public: false
+    plan:
+      - aggregate:
+        - get: tools
+        - get: m2
+        - get: repo
+          passed: [ test-deploy ]
+          trigger: true
+      - task: test-smoke
+        file: tools/concourse/tasks/test-smoke.yml
+        params:
+          - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+          - REDOWNLOAD_INFRA: {{redownload-infra}}
+          - REDEPLOY_INFRA: {{redeploy-infra}}
+          - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+          - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+          - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+          - REPO_WITH_JARS: {{snapshots-repo}}
+          - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+          - M2_REPO: {{maven-local-dir}}
+          - CF_TEST_USERNAME: {{cf-test-username}}
+          - CF_TEST_PASSWORD: {{cf-test-password}}
+          - CF_TEST_ORG: {{cf-test-org}}
+          - CF_TEST_SPACE: {{cf-test-space}}
+          - CF_TEST_API_URL: {{cf-test-api-url}}
+
+  # - name: test-rollback-deploy
+  #   serial: true
+  #   public: false
+  #   plan:
+  #     - aggregate:
+  #       - get: tools
+  #       - get: m2
+  #       - get: repo
+  #         passed: [ test-smoke ]
+  #         trigger: true
+  #     - task: test-rollback-deploy
+  #       file: tools/concourse/tasks/test-rollback-deploy.yml
+  #       params:
+  #         - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+  #         - GIT_EMAIL: {{git-email}}
+  #         - GIT_NAME: {{git-name}}
+  #         - REDOWNLOAD_INFRA: {{redownload-infra}}
+  #         - REDEPLOY_INFRA: {{redeploy-infra}}
+  #         - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+  #         - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+  #         - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+  #         - REPO_WITH_JARS: {{snapshots-repo}}
+  #         - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+  #         - M2_REPO: {{maven-local-dir}}
+  #         - CF_TEST_USERNAME: {{cf-test-username}}
+  #         - CF_TEST_PASSWORD: {{cf-test-password}}
+  #         - CF_TEST_ORG: {{cf-test-org}}
+  #         - CF_TEST_SPACE: {{cf-test-space}}
+  #         - CF_TEST_API_URL: {{cf-test-api-url}}
+
+  # - name: test-rollback-smoke
+  #   serial: true
+  #   public: false
+  #   plan:
+  #     - aggregate:
+  #       - get: tools
+  #       - get: m2
+  #       - get: repo
+  #         passed: [ test-rollback-deploy ]
+  #         trigger: true
+  #     - task: test-rollback-smoke
+  #       file: tools/concourse/tasks/test-rollback-smoke.yml
+  #       params:
+  #         - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+  #         - GIT_EMAIL: {{git-email}}
+  #         - GIT_NAME: {{git-name}}
+  #         - REDOWNLOAD_INFRA: {{redownload-infra}}
+  #         - REDEPLOY_INFRA: {{redeploy-infra}}
+  #         - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+  #         - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+  #         - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+  #         - REPO_WITH_JARS: {{snapshots-repo}}
+  #         - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+  #         - M2_REPO: {{maven-local-dir}}
+  #         - CF_TEST_USERNAME: {{cf-test-username}}
+  #         - CF_TEST_PASSWORD: {{cf-test-password}}
+  #         - CF_TEST_ORG: {{cf-test-org}}
+  #         - CF_TEST_SPACE: {{cf-test-space}}
+  #         - CF_TEST_API_URL: {{cf-test-api-url}}
+
+  - name: stage-deploy
+    serial: true
+    public: false
+    plan:
+      - aggregate:
+        - get: tools
+        - get: m2
+        - get: repo
+          # passed: [ test-rollback-smoke ]
+          passed: [ test-smoke ]
+          trigger: true
+      - task: stage-deploy
+        file: tools/concourse/tasks/stage-deploy.yml
+        params:
+          - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+          - REDOWNLOAD_INFRA: {{redownload-infra}}
+          - REDEPLOY_INFRA: {{redeploy-infra}}
+          - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+          - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+          - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+          - REPO_WITH_JARS: {{snapshots-repo}}
+          - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+          - M2_REPO: {{maven-local-dir}}
+          - CF_STAGE_USERNAME: {{cf-stage-username}}
+          - CF_STAGE_PASSWORD: {{cf-stage-password}}
+          - CF_STAGE_ORG: {{cf-stage-org}}
+          - CF_STAGE_SPACE: {{cf-stage-space}}
+          - CF_STAGE_API_URL: {{cf-stage-api-url}}
+          - CF_HOSTNAME_UUID: {{cf-hostname-uuid}}
+
+  - name: stage-e2e
+    serial: true
+    public: false
+    plan:
+      - aggregate:
+        - get: tools
+        - get: m2
+        - get: repo
+          passed: [ stage-deploy ]
+          trigger: true
+      - task: stage-smoke
+        file: tools/concourse/tasks/stage-e2e.yml
+        params:
+          - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+          - GIT_EMAIL: {{git-email}}
+          - GIT_NAME: {{git-name}}
+          - REDOWNLOAD_INFRA: {{redownload-infra}}
+          - REDEPLOY_INFRA: {{redeploy-infra}}
+          - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+          - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+          - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+          - REPO_WITH_JARS: {{snapshots-repo}}
+          - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+          - M2_REPO: {{maven-local-dir}}
+          - CF_STAGE_USERNAME: {{cf-stage-username}}
+          - CF_STAGE_PASSWORD: {{cf-stage-password}}
+          - CF_STAGE_ORG: {{cf-stage-org}}
+          - CF_STAGE_SPACE: {{cf-stage-space}}
+          - CF_STAGE_API_URL: {{cf-stage-api-url}}
+
+  # - name: prod-deploy
+  #   serial: true
+  #   public: false
+  #   plan:
+  #     - aggregate:
+  #       - get: tools
+  #       - get: m2
+  #       - get: repo
+  #         passed: [ stage-e2e ]
+  #         trigger: false
+  #     - task: prod-deploy
+  #       file: tools/concourse/tasks/prod-deploy.yml
+  #       params:
+  #         - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+  #         - GIT_EMAIL: {{git-email}}
+  #         - GIT_NAME: {{git-name}}
+  #         - REDOWNLOAD_INFRA: {{redownload-infra}}
+  #         - REDEPLOY_INFRA: {{redeploy-infra}}
+  #         - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+  #         - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+  #         - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+  #         - REPO_WITH_JARS: {{snapshots-repo}}
+  #         - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+  #         - M2_REPO: {{maven-local-dir}}
+  #         - CF_PROD_USERNAME: {{cf-prod-username}}
+  #         - CF_PROD_PASSWORD: {{cf-prod-password}}
+  #         - CF_PROD_ORG: {{cf-prod-org}}
+  #         - CF_PROD_SPACE: {{cf-prod-space}}
+  #         - CF_PROD_API_URL: {{cf-prod-api-url}}
+  #         - CF_HOSTNAME_UUID: {{cf-hostname-uuid}}
+  #     - put: repo
+  #       params:
+  #         repository: out
+  #         tag: out/tag
+  #         only_tag: true
+
+  # - name: prod-complete
+  #   serial: true
+  #   public: false
+  #   plan:
+  #     - aggregate:
+  #       - get: tools
+  #       - get: m2
+  #       - get: repo
+  #         passed: [ prod-deploy ]
+  #         trigger: false
+  #     - task: prod-complete
+  #       file: tools/concourse/tasks/prod-complete.yml
+  #       params:
+  #         - _JAVA_OPTIONS: -Djava.security.egd=file:/dev/./urandom
+  #         - GIT_EMAIL: {{git-email}}
+  #         - GIT_NAME: {{git-name}}
+  #         - REDOWNLOAD_INFRA: {{redownload-infra}}
+  #         - REDEPLOY_INFRA: {{redeploy-infra}}
+  #         - M2_SETTINGS_REPO_ID: {{m2-settings-repo-id}}
+  #         - M2_SETTINGS_REPO_USERNAME: {{m2-settings-repo-username}}
+  #         - M2_SETTINGS_REPO_PASSWORD: {{m2-settings-repo-password}}
+  #         - REPO_WITH_JARS: {{snapshots-repo}}
+  #         - REPO_WITH_JARS_INSECURE: {{repo-with-jars-insecure}}
+  #         - M2_REPO: {{maven-local-dir}}
+  #         - CF_PROD_USERNAME: {{cf-prod-username}}
+  #         - CF_PROD_PASSWORD: {{cf-prod-password}}
+  #         - CF_PROD_ORG: {{cf-prod-org}}
+  #         - CF_PROD_SPACE: {{cf-prod-space}}
+  #         - CF_PROD_API_URL: {{cf-prod-api-url}}
